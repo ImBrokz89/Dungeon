@@ -1,5 +1,4 @@
 local targetColor = BrickColor.new("Pine Cone")
-
 local function applyColorToFolder(folder)
     if folder then
         for _, child in ipairs(folder:GetChildren()) do
@@ -17,19 +16,25 @@ local function applyColorToFolder(folder)
         end
     end
 end
+
+local function deleteDecorationsFolder()
+    local decorationsFolder = workspace:FindFirstChild("Decorations")
+    if decorationsFolder then
+        decorationsFolder:Destroy()
+    end
+end
+deleteDecorationsFolder()
 local function refreshColors()
     while true do
         local structuresFolder = workspace:FindFirstChild("Map"):FindFirstChild("Structures")
         if structuresFolder then
             applyColorToFolder(structuresFolder)
         end
-
         local rocksFolder = workspace:FindFirstChild("Map"):FindFirstChild("Rocks")
         if rocksFolder then
             applyColorToFolder(rocksFolder)
         end
-
-        wait(5)
+        wait(5) -- Rafraîchit toutes les 5 secondes
     end
 end
 spawn(refreshColors)
