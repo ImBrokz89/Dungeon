@@ -1,7 +1,5 @@
--- Définir la couleur désirée
 local targetColor = BrickColor.new("Medium stone grey")
 
--- Fonction pour appliquer la couleur aux objets d'un dossier
 local function applyColorToFolder(folder)
     if folder then
         for _, child in ipairs(folder:GetChildren()) do
@@ -23,11 +21,9 @@ local function applyColorToFolder(folder)
     end
 end
 
--- Appliquer la couleur aux structures
 local structuresFolder = workspace:FindFirstChild("Map"):FindFirstChild("Structures")
 applyColorToFolder(structuresFolder)
 
--- Appliquer la couleur aux rochers
 local rocksFolder = workspace:FindFirstChild("Map"):FindFirstChild("Rocks")
 applyColorToFolder(rocksFolder)
 
