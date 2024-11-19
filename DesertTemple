@@ -1,1 +1,33 @@
+-- Définir la couleur désirée
+local targetColor = BrickColor.new("Medium stone grey")
+
+-- Fonction pour appliquer la couleur aux objets d'un dossier
+local function applyColorToFolder(folder)
+    if folder then
+        for _, child in ipairs(folder:GetChildren()) do
+            if child:IsA("BasePart") then -- Vérifie si l'objet est une pièce (partie physique)
+                child.BrickColor = BrickColor.new(targetColor)
+                child.Material = Enum.Material.SmoothPlastic -- Changez le matériau si nécessaire
+            elseif child:IsA("Model") then -- Si c'est un modèle, parcourir ses parties
+                for _, part in ipairs(child:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.BrickColor = BrickColor.new(targetColor)
+                        part.Material = Enum.Material.SmoothPlastic
+                    end
+                end
+            end
+        end
+        print("Les couleurs des objets dans " .. folder.Name .. " ont été mises à jour.")
+    else
+        print("Le dossier " .. folder.Name .. " n'a pas été trouvé.")
+    end
+end
+
+-- Appliquer la couleur aux structures
+local structuresFolder = workspace:FindFirstChild("Map"):FindFirstChild("Structures")
+applyColorToFolder(structuresFolder)
+
+-- Appliquer la couleur aux rochers
+local rocksFolder = workspace:FindFirstChild("Map"):FindFirstChild("Rocks")
+applyColorToFolder(rocksFolder)
 
