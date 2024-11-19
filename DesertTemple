@@ -17,9 +17,19 @@ local function applyColorToFolder(folder)
         end
     end
 end
+local function refreshColors()
+    while true do
+        local structuresFolder = workspace:FindFirstChild("Map"):FindFirstChild("Structures")
+        if structuresFolder then
+            applyColorToFolder(structuresFolder)
+        end
 
-local structuresFolder = workspace:FindFirstChild("Map"):FindFirstChild("Structures")
-applyColorToFolder(structuresFolder)
+        local rocksFolder = workspace:FindFirstChild("Map"):FindFirstChild("Rocks")
+        if rocksFolder then
+            applyColorToFolder(rocksFolder)
+        end
 
-local rocksFolder = workspace:FindFirstChild("Map"):FindFirstChild("Rocks")
-applyColorToFolder(rocksFolder)
+        wait(5)
+    end
+end
+spawn(refreshColors)
