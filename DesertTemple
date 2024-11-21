@@ -37,6 +37,19 @@ local function deleteRocksAndBarriers()
     end
 end
 
+local function deleteSpecificTempleElement()
+    local temple2 = workspace.Map.Structures:FindFirstChild("Temple2")
+    if temple2 then
+        local targetPart = temple2:GetChildren()[13]
+        if targetPart then
+            print("Détruire l'élément spécifique de Temple2.")
+            targetPart:Destroy()
+        end
+    end
+end
+
+deleteSpecificTempleElement()
+
 deleteDecorationsFolder()
 deleteRocksAndBarriers()
 
@@ -53,19 +66,23 @@ local function refreshColors()
         wait(5)
     end
 end
+
 spawn(refreshColors)
+
 --
 local player = game.Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 
 -- Paramètres
-local SAFE_DISTANCE = 10
-local OBSTACLE_AVOIDANCE_DISTANCE = 5
-local OBSTACLE_CLEARANCE = 3
-local OBSTACLE_CHECK_ANGLE = math.rad(45)
-local WALK_SPEED = 20
-local SKILL_COOLDOWN = 6
-local TOOL_ACTIVATION_DISTANCE = 12
+local safeDistance = 10
+local ObstacleDistance = 5
+local ObstacleClear = 3
+local ObstacleCheck = math.rad(45)
+local WallSpeed = 20
+local SkillCoolDown = 6
+local ToolDistance = 12
+local DodgeDistance = 5
+local DODGE_COOLDOWN = 0.1 
 
 local ignoreObjects = {}
 
@@ -85,7 +102,7 @@ end
 
 local function detectObstacle(direction)
     local rayOrigin = player.Character.HumanoidRootPart.Position
-    local rayDirection = direction * OBSTACLE_AVOIDANCE_DISTANCE
+    local rayDirection = direction * ObstacleDistance
 
     local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
     if result then
@@ -98,15 +115,14 @@ local function detectObstacle(direction)
 end
 
 local function adjustDirection(originalDirection)
-
-    local leftDirection = CFrame.Angles(0, -OBSTACLE_CHECK_ANGLE, 0) * originalDirection
+    local leftDirection = CFrame.Angles(0, -ObstacleCheck, 0) * originalDirection
     local hasLeftObstacle, _ = detectObstacle(leftDirection)
 
     if not hasLeftObstacle then
         return leftDirection
     end
 
-    local rightDirection = CFrame.Angles(0, OBSTACLE_CHECK_ANGLE, 0) * originalDirection
+    local rightDirection = CFrame.Angles(0, ObstacleCheck, 0) * originalDirection
     local hasRightObstacle, _ = detectObstacle(rightDirection)
 
     if not hasRightObstacle then
@@ -114,6 +130,38 @@ local function adjustDirection(originalDirection)
     end
 
     return -originalDirection
+end
+
+local function detectAttack()
+    for _, obj in pairs(workspace:GetChildren()) do
+        if obj:IsA("BasePart") and obj.Name == "Part" then
+            local distance = (player.Character.HumanoidRootPart.Position - obj.Position).Magnitude
+            if distance <= DodgeDistance then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+local function dodgeSideways()
+    local attack = detectAttack()
+    if attack then
+        local direction = (attack.Position - player.Character.HumanoidRootPart.Position).Unit
+        local leftDirection = CFrame.Angles(0, math.rad(-90), 0) * direction
+        local rightDirection = CFrame.Angles(0, math.rad(90), 0) * direction
+
+        local hasLeftObstacle, _ = detectObstacle(leftDirection)
+        local hasRightObstacle, _ = detectObstacle(rightDirection)
+
+        if not hasLeftObstacle then
+            player.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + leftDirection * DodgeDistance
+        elseif not hasRightObstacle then
+            player.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + rightDirection * DodgeDistance
+        else
+            player.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + leftDirection * DodgeDistance
+        end
+    end
 end
 
 local function findNearestEnemy()
@@ -145,7 +193,7 @@ local function simulateKeyPress(key)
 end
 
 local function activateToolOrSkill(distance)
-    if distance <= TOOL_ACTIVATION_DISTANCE then
+    if distance <= ToolDistance then
         simulateKeyPress(Enum.KeyCode.E)
         simulateKeyPress(Enum.KeyCode.Q)
     end
@@ -169,16 +217,15 @@ local function moveToEnemy(enemy)
 
         local hasObstacle, _ = detectObstacle(direction)
         if hasObstacle then
-            print("Obstacle détecté, ajustement de la trajectoire...")
             direction = adjustDirection(direction)
         end
 
-        if distance > SAFE_DISTANCE then
-            local targetPosition = playerPosition + direction * (distance - SAFE_DISTANCE)
+        if distance > safeDistance then
+            local targetPosition = playerPosition + direction * (distance - safeDistance)
             player.Character.Humanoid:MoveTo(targetPosition)
         else
             local safeDirection = (playerPosition - enemyPosition).Unit
-            local safePosition = playerPosition + safeDirection * (SAFE_DISTANCE - distance + 1)
+            local safePosition = playerPosition + safeDirection * (safeDistance - distance + 1)
             player.Character.Humanoid:MoveTo(safePosition)
         end
 
@@ -192,6 +239,7 @@ local function autoFarm()
             local nearestEnemy = findNearestEnemy()
             if nearestEnemy then
                 moveToEnemy(nearestEnemy)
+                dodgeSideways()
             end
         end
         wait(0.1)
@@ -201,17 +249,15 @@ end
 local function initializeCharacter(character)
     local humanoid = character:WaitForChild("Humanoid")
 
-    humanoid.WalkSpeed = WALK_SPEED
+    humanoid.WalkSpeed = WallSpeed
 
     humanoid.Died:Connect(function()
-        print("Le joueur est mort. En attente de réapparition...")
     end)
 
     task.spawn(autoFarm)
 end
 
 player.CharacterAdded:Connect(function(character)
-    print("Nouveau personnage détecté. Réinitialisation.")
     initializeCharacter(character)
 end)
 
