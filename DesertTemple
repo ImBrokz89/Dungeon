@@ -38,3 +38,192 @@ local function refreshColors()
     end
 end
 spawn(refreshColors)
+---
+local player = game.Players.LocalPlayer
+
+-- Paramètres
+local SAFE_DISTANCE = 10
+local OBSTACLE_CHECK_DISTANCE = 5
+local OBSTACLE_CLEARANCE = 5
+local STUCK_CHECK_INTERVAL = 2 -- Intervalle de vérification pour bloquage
+local MAX_STUCK_TIME = 5 -- Temps maximum avant repositionnement
+local TOOL_ACTIVATION_DISTANCE = 15 -- Distance à laquelle activer l'outil
+
+-- Liste des objets à ignorer pour le raycast
+local ignoreObjects = {}
+
+-- Initialisation des paramètres du raycast
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+
+-- Fonction pour mettre à jour les objets ignorés par le raycast
+local function updateIgnoreObjects()
+    table.insert(ignoreObjects, player.Character)
+
+    local decorations = workspace:FindFirstChild("Decorations")
+    if decorations then
+        table.insert(ignoreObjects, decorations)
+    end
+
+    rayParams.FilterDescendantsInstances = ignoreObjects
+end
+
+-- Fonction pour détecter les obstacles
+local function detectObstacle(direction)
+    local rayOrigin = player.Character.HumanoidRootPart.Position
+    local rayDirection = direction * OBSTACLE_CHECK_DISTANCE
+
+    local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
+    if result then
+        local hitPart = result.Instance
+        if hitPart and hitPart.CanCollide then
+            return true, hitPart -- Obstacle détecté
+        end
+    end
+    return false, nil -- Pas d'obstacle
+end
+
+-- Fonction pour trouver l'ennemi le plus proche
+local function findNearestEnemy()
+    local nearestEnemy = nil
+    local nearestDistance = math.huge
+
+    for _, room in ipairs(workspace.dungeon:GetChildren()) do
+        if room:FindFirstChild("enemyFolder") then
+            for _, enemy in ipairs(room.enemyFolder:GetChildren()) do
+                if enemy:FindFirstChild("HumanoidRootPart") and enemy:FindFirstChild("Humanoid") then
+                    local distance = (player.Character.HumanoidRootPart.Position - enemy.HumanoidRootPart.Position).Magnitude
+                    if distance < nearestDistance then
+                        nearestDistance = distance
+                        nearestEnemy = enemy
+                    end
+                end
+            end
+        end
+    end
+
+    return nearestEnemy
+end
+
+-- Fonction pour simuler l'appui sur une touche
+local function simulateKeyPress(key)
+    local virtualInputManager = game:GetService("VirtualInputManager")
+    virtualInputManager:SendKeyEvent(true, key, false, nil)
+    wait(0.1) -- Attente pour simuler un appui court
+    virtualInputManager:SendKeyEvent(false, key, false, nil)
+end
+
+-- Fonction pour activer l'outil ou le skill
+local function activateToolOrSkill(distance)
+    if distance <= TOOL_ACTIVATION_DISTANCE then
+        simulateKeyPress(Enum.KeyCode.E.Name) 
+        simulateKeyPress(Enum.KeyCode.Q.Name)-- Simule l'appui sur la touche "E"
+    end
+end
+
+-- Fonction pour déplacer le joueur vers l'ennemi
+local function moveToEnemy(enemy)
+    if enemy and enemy:FindFirstChild("HumanoidRootPart") then
+        local enemyPosition = enemy.HumanoidRootPart.Position
+        local playerPosition = player.Character.HumanoidRootPart.Position
+        local distance = (playerPosition - enemyPosition).Magnitude
+
+        -- Oriente le joueur vers l'ennemi
+        player.Character.HumanoidRootPart.CFrame = CFrame.lookAt(playerPosition, Vector3.new(enemyPosition.X, playerPosition.Y, enemyPosition.Z))
+
+        local direction = (enemyPosition - playerPosition).Unit
+
+        -- Vérifie s'il y a un obstacle dans la direction
+        local hasObstacle, _ = detectObstacle(direction)
+        if hasObstacle then
+            print("Obstacle détecté, ajustement de la trajectoire...")
+            direction = Vector3.new(-direction.Z, 0, direction.X) -- Tourne légèrement à gauche
+        end
+
+        if distance > SAFE_DISTANCE then
+            -- Se rapprocher de l'ennemi
+            local targetPosition = playerPosition + direction * (distance - SAFE_DISTANCE)
+            player.Character.Humanoid:MoveTo(targetPosition)
+        else
+            -- Maintenir une distance sécurisée
+            local safeDirection = (playerPosition - enemyPosition).Unit
+            local safePosition = playerPosition + safeDirection * (SAFE_DISTANCE - distance + 1)
+            player.Character.Humanoid:MoveTo(safePosition)
+
+            -- Activer l'outil ou le skill si la distance est inférieure au seuil
+            activateToolOrSkill(distance)
+        end
+    end
+end
+
+-- Fonction pour repositionner le joueur en cas de blocage
+local lastPosition = nil
+local stuckTime = 0
+
+local function checkIfStuck()
+    while true do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local currentPosition = player.Character.HumanoidRootPart.Position
+            if lastPosition and (currentPosition - lastPosition).Magnitude < 1 then
+                stuckTime = stuckTime + STUCK_CHECK_INTERVAL
+                if stuckTime >= MAX_STUCK_TIME then
+                    print("Le joueur est coincé, recalibrage...")
+                    local randomDirection = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit
+                    local newPosition = player.Character.HumanoidRootPart.Position + randomDirection * OBSTACLE_CLEARANCE
+                    player.Character.Humanoid:MoveTo(newPosition)
+                    stuckTime = 0
+                end
+            else
+                stuckTime = 0
+            end
+            lastPosition = currentPosition
+        end
+        wait(STUCK_CHECK_INTERVAL)
+    end
+end
+
+-- Fonction principale de l'auto-farm
+local function autoFarm()
+    while true do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local nearestEnemy = findNearestEnemy()
+            if nearestEnemy then
+                moveToEnemy(nearestEnemy)
+            else
+                print("Aucun ennemi trouvé. Repositionnement...")
+                local randomDirection = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit
+                player.Character.Humanoid:MoveTo(player.Character.HumanoidRootPart.Position + randomDirection * OBSTACLE_CLEARANCE)
+            end
+        end
+        wait(0.1)
+    end
+end
+
+-- Fonction pour gérer la réapparition et continuer l'auto-farm
+local function initializeCharacter(character)
+    local humanoid = character:WaitForChild("Humanoid")
+
+    humanoid.Died:Connect(function()
+        print("Le joueur est mort. En attente de réapparition...")
+    end)
+
+    -- Relancer l'auto-farm après la réapparition
+    task.spawn(autoFarm)
+end
+
+-- Événement pour détecter la réapparition du personnage
+player.CharacterAdded:Connect(function(character)
+    print("Nouveau personnage détecté. Réinitialisation.")
+    initializeCharacter(character)
+end)
+
+-- Initialisation lors du premier chargement
+if player.Character then
+    initializeCharacter(player.Character)
+end
+
+-- Démarre la vérification si le joueur est coincé
+task.spawn(checkIfStuck)
+
+-- Met à jour la liste des objets à ignorer
+updateIgnoreObjects()
