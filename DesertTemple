@@ -43,11 +43,9 @@ local player = game.Players.LocalPlayer
 
 -- Paramètres
 local SAFE_DISTANCE = 10
-local OBSTACLE_CHECK_DISTANCE = 5
-local OBSTACLE_CLEARANCE = 5
-local STUCK_CHECK_INTERVAL = 2 -- Intervalle de vérification pour bloquage
-local MAX_STUCK_TIME = 5 -- Temps maximum avant repositionnement
-local TOOL_ACTIVATION_DISTANCE = 15 -- Distance à laquelle activer l'outil
+local OBSTACLE_AVOIDANCE_DISTANCE = 5
+local OBSTACLE_CLEARANCE = 3 -- Distance utilisée pour contourner
+local OBSTACLE_CHECK_ANGLE = math.rad(45) -- Angle pour ajuster la direction
 
 -- Liste des objets à ignorer pour le raycast
 local ignoreObjects = {}
@@ -68,10 +66,10 @@ local function updateIgnoreObjects()
     rayParams.FilterDescendantsInstances = ignoreObjects
 end
 
--- Fonction pour détecter les obstacles
+-- Fonction pour détecter les obstacles dans une direction donnée
 local function detectObstacle(direction)
     local rayOrigin = player.Character.HumanoidRootPart.Position
-    local rayDirection = direction * OBSTACLE_CHECK_DISTANCE
+    local rayDirection = direction * OBSTACLE_AVOIDANCE_DISTANCE
 
     local result = workspace:Raycast(rayOrigin, rayDirection, rayParams)
     if result then
@@ -80,7 +78,29 @@ local function detectObstacle(direction)
             return true, hitPart -- Obstacle détecté
         end
     end
-    return false, nil -- Pas d'obstacle
+    return false, nil -- Aucun obstacle
+end
+
+-- Fonction pour ajuster la trajectoire pour contourner un obstacle
+local function adjustDirection(originalDirection)
+    -- Essaie de contourner sur la gauche
+    local leftDirection = CFrame.Angles(0, -OBSTACLE_CHECK_ANGLE, 0) * originalDirection
+    local hasLeftObstacle, _ = detectObstacle(leftDirection)
+
+    if not hasLeftObstacle then
+        return leftDirection -- Pas d'obstacle à gauche, contourner par là
+    end
+
+    -- Si la gauche est bloquée, essaie de contourner sur la droite
+    local rightDirection = CFrame.Angles(0, OBSTACLE_CHECK_ANGLE, 0) * originalDirection
+    local hasRightObstacle, _ = detectObstacle(rightDirection)
+
+    if not hasRightObstacle then
+        return rightDirection -- Pas d'obstacle à droite, contourner par là
+    end
+
+    -- Si tout est bloqué, garde la direction originale (ou recalibre)
+    return -originalDirection -- (Reculer si absolument nécessaire)
 end
 
 -- Fonction pour trouver l'ennemi le plus proche
@@ -105,22 +125,6 @@ local function findNearestEnemy()
     return nearestEnemy
 end
 
--- Fonction pour simuler l'appui sur une touche
-local function simulateKeyPress(key)
-    local virtualInputManager = game:GetService("VirtualInputManager")
-    virtualInputManager:SendKeyEvent(true, key, false, nil)
-    wait(0.1) -- Attente pour simuler un appui court
-    virtualInputManager:SendKeyEvent(false, key, false, nil)
-end
-
--- Fonction pour activer l'outil ou le skill
-local function activateToolOrSkill(distance)
-    if distance <= TOOL_ACTIVATION_DISTANCE then
-        simulateKeyPress(Enum.KeyCode.E.Name) 
-        simulateKeyPress(Enum.KeyCode.Q.Name)-- Simule l'appui sur la touche "E"
-    end
-end
-
 -- Fonction pour déplacer le joueur vers l'ennemi
 local function moveToEnemy(enemy)
     if enemy and enemy:FindFirstChild("HumanoidRootPart") then
@@ -137,7 +141,7 @@ local function moveToEnemy(enemy)
         local hasObstacle, _ = detectObstacle(direction)
         if hasObstacle then
             print("Obstacle détecté, ajustement de la trajectoire...")
-            direction = Vector3.new(-direction.Z, 0, direction.X) -- Tourne légèrement à gauche
+            direction = adjustDirection(direction) -- Ajuste la direction pour contourner
         end
 
         if distance > SAFE_DISTANCE then
@@ -149,36 +153,7 @@ local function moveToEnemy(enemy)
             local safeDirection = (playerPosition - enemyPosition).Unit
             local safePosition = playerPosition + safeDirection * (SAFE_DISTANCE - distance + 1)
             player.Character.Humanoid:MoveTo(safePosition)
-
-            -- Activer l'outil ou le skill si la distance est inférieure au seuil
-            activateToolOrSkill(distance)
         end
-    end
-end
-
--- Fonction pour repositionner le joueur en cas de blocage
-local lastPosition = nil
-local stuckTime = 0
-
-local function checkIfStuck()
-    while true do
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local currentPosition = player.Character.HumanoidRootPart.Position
-            if lastPosition and (currentPosition - lastPosition).Magnitude < 1 then
-                stuckTime = stuckTime + STUCK_CHECK_INTERVAL
-                if stuckTime >= MAX_STUCK_TIME then
-                    print("Le joueur est coincé, recalibrage...")
-                    local randomDirection = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit
-                    local newPosition = player.Character.HumanoidRootPart.Position + randomDirection * OBSTACLE_CLEARANCE
-                    player.Character.Humanoid:MoveTo(newPosition)
-                    stuckTime = 0
-                end
-            else
-                stuckTime = 0
-            end
-            lastPosition = currentPosition
-        end
-        wait(STUCK_CHECK_INTERVAL)
     end
 end
 
@@ -189,10 +164,6 @@ local function autoFarm()
             local nearestEnemy = findNearestEnemy()
             if nearestEnemy then
                 moveToEnemy(nearestEnemy)
-            else
-                print("Aucun ennemi trouvé. Repositionnement...")
-                local randomDirection = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit
-                player.Character.Humanoid:MoveTo(player.Character.HumanoidRootPart.Position + randomDirection * OBSTACLE_CLEARANCE)
             end
         end
         wait(0.1)
@@ -221,9 +192,6 @@ end)
 if player.Character then
     initializeCharacter(player.Character)
 end
-
--- Démarre la vérification si le joueur est coincé
-task.spawn(checkIfStuck)
 
 -- Met à jour la liste des objets à ignorer
 updateIgnoreObjects()
