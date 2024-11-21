@@ -50,31 +50,28 @@ local function refreshColors()
         if rocksFolder then
             applyColorToFolder(rocksFolder)
         end
-        wait(5) -- Rafraîchit toutes les 5 secondes
+        wait(5)
     end
 end
 spawn(refreshColors)
----
+--
 local player = game.Players.LocalPlayer
 local UserInputService = game:GetService("UserInputService")
 
 -- Paramètres
 local SAFE_DISTANCE = 10
 local OBSTACLE_AVOIDANCE_DISTANCE = 5
-local OBSTACLE_CLEARANCE = 3 -- Distance utilisée pour contourner
-local OBSTACLE_CHECK_ANGLE = math.rad(45) -- Angle pour ajuster la direction
-local WALK_SPEED = 20 -- Vitesse de marche du joueur (ajustez cette valeur selon votre besoin)
-local SKILL_COOLDOWN = 6 -- Temps de recharge pour l'auto-skill en secondes
-local TOOL_ACTIVATION_DISTANCE = 12 -- Distance pour activer les compétences ou outils
+local OBSTACLE_CLEARANCE = 3
+local OBSTACLE_CHECK_ANGLE = math.rad(45)
+local WALK_SPEED = 20
+local SKILL_COOLDOWN = 6
+local TOOL_ACTIVATION_DISTANCE = 12
 
--- Liste des objets à ignorer pour le raycast
 local ignoreObjects = {}
 
--- Initialisation des paramètres du raycast
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Blacklist
 
--- Fonction pour mettre à jour les objets ignorés par le raycast
 local function updateIgnoreObjects()
     table.insert(ignoreObjects, player.Character)
 
@@ -86,7 +83,6 @@ local function updateIgnoreObjects()
     rayParams.FilterDescendantsInstances = ignoreObjects
 end
 
--- Fonction pour détecter les obstacles dans une direction donnée
 local function detectObstacle(direction)
     local rayOrigin = player.Character.HumanoidRootPart.Position
     local rayDirection = direction * OBSTACLE_AVOIDANCE_DISTANCE
@@ -95,35 +91,31 @@ local function detectObstacle(direction)
     if result then
         local hitPart = result.Instance
         if hitPart and hitPart.CanCollide then
-            return true, hitPart -- Obstacle détecté
+            return true, hitPart
         end
     end
-    return false, nil -- Aucun obstacle
+    return false, nil
 end
 
--- Fonction pour ajuster la trajectoire pour contourner un obstacle
 local function adjustDirection(originalDirection)
-    -- Essaie de contourner sur la gauche
+
     local leftDirection = CFrame.Angles(0, -OBSTACLE_CHECK_ANGLE, 0) * originalDirection
     local hasLeftObstacle, _ = detectObstacle(leftDirection)
 
     if not hasLeftObstacle then
-        return leftDirection -- Pas d'obstacle à gauche, contourner par là
+        return leftDirection
     end
 
-    -- Si la gauche est bloquée, essaie de contourner sur la droite
     local rightDirection = CFrame.Angles(0, OBSTACLE_CHECK_ANGLE, 0) * originalDirection
     local hasRightObstacle, _ = detectObstacle(rightDirection)
 
     if not hasRightObstacle then
-        return rightDirection -- Pas d'obstacle à droite, contourner par là
+        return rightDirection
     end
 
-    -- Si tout est bloqué, garde la direction originale (ou recalibre)
-    return -originalDirection -- (Reculer si absolument nécessaire)
+    return -originalDirection
 end
 
--- Fonction pour trouver l'ennemi le plus proche
 local function findNearestEnemy()
     local nearestEnemy = nil
     local nearestDistance = math.huge
@@ -145,59 +137,55 @@ local function findNearestEnemy()
     return nearestEnemy
 end
 
--- Fonction pour simuler l'appui sur une touche
 local function simulateKeyPress(key)
     local virtualInputManager = game:GetService("VirtualInputManager")
     virtualInputManager:SendKeyEvent(true, key, false, nil)
-    wait(0.1) -- Attente pour simuler un appui court
+    wait(0.1)
     virtualInputManager:SendKeyEvent(false, key, false, nil)
 end
 
--- Fonction pour activer l'outil ou le skill si le joueur est à la bonne distance
 local function activateToolOrSkill(distance)
     if distance <= TOOL_ACTIVATION_DISTANCE then
-        -- Simule l'appui sur les touches "E" et "Q"
         simulateKeyPress(Enum.KeyCode.E)
         simulateKeyPress(Enum.KeyCode.Q)
     end
 end
 
--- Fonction pour déplacer le joueur vers l'ennemi
 local function moveToEnemy(enemy)
     if enemy and enemy:FindFirstChild("HumanoidRootPart") then
         local enemyPosition = enemy.HumanoidRootPart.Position
         local playerPosition = player.Character.HumanoidRootPart.Position
         local distance = (playerPosition - enemyPosition).Magnitude
 
-        -- Oriente le joueur vers l'ennemi
-        player.Character.HumanoidRootPart.CFrame = CFrame.lookAt(playerPosition, Vector3.new(enemyPosition.X, playerPosition.Y, enemyPosition.Z))
+        local currentOrientation = player.Character.HumanoidRootPart.CFrame.LookVector
+        local directionToEnemy = (enemyPosition - playerPosition).Unit
+        local angleDiff = math.acos(currentOrientation:Dot(directionToEnemy))
+
+        if angleDiff > 0.1 then
+            player.Character.HumanoidRootPart.CFrame = CFrame.lookAt(playerPosition, Vector3.new(enemyPosition.X, playerPosition.Y, enemyPosition.Z))
+        end
 
         local direction = (enemyPosition - playerPosition).Unit
 
-        -- Vérifie s'il y a un obstacle dans la direction
         local hasObstacle, _ = detectObstacle(direction)
         if hasObstacle then
             print("Obstacle détecté, ajustement de la trajectoire...")
-            direction = adjustDirection(direction) -- Ajuste la direction pour contourner
+            direction = adjustDirection(direction)
         end
 
         if distance > SAFE_DISTANCE then
-            -- Se rapprocher de l'ennemi
             local targetPosition = playerPosition + direction * (distance - SAFE_DISTANCE)
             player.Character.Humanoid:MoveTo(targetPosition)
         else
-            -- Maintenir une distance sécurisée
             local safeDirection = (playerPosition - enemyPosition).Unit
             local safePosition = playerPosition + safeDirection * (SAFE_DISTANCE - distance + 1)
             player.Character.Humanoid:MoveTo(safePosition)
         end
 
-        -- Activer l'outil ou la compétence si le joueur est proche de l'ennemi
         activateToolOrSkill(distance)
     end
 end
 
--- Fonction principale de l'auto-farm
 local function autoFarm()
     while true do
         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
@@ -210,31 +198,25 @@ local function autoFarm()
     end
 end
 
--- Fonction pour gérer la réapparition et continuer l'auto-farm
 local function initializeCharacter(character)
     local humanoid = character:WaitForChild("Humanoid")
 
-    -- Définir la vitesse de marche
-    humanoid.WalkSpeed = WALK_SPEED  -- Applique la vitesse de marche personnalisée
+    humanoid.WalkSpeed = WALK_SPEED
 
     humanoid.Died:Connect(function()
         print("Le joueur est mort. En attente de réapparition...")
     end)
 
-    -- Relancer l'auto-farm après la réapparition
     task.spawn(autoFarm)
 end
 
--- Événement pour détecter la réapparition du personnage
 player.CharacterAdded:Connect(function(character)
     print("Nouveau personnage détecté. Réinitialisation.")
     initializeCharacter(character)
 end)
 
--- Initialisation lors du premier chargement
 if player.Character then
     initializeCharacter(player.Character)
 end
 
--- Met à jour la liste des objets à ignorer
 updateIgnoreObjects()
