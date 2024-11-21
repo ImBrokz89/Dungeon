@@ -1,4 +1,5 @@
 local targetColor = BrickColor.new("Pine Cone")
+
 local function applyColorToFolder(folder)
     if folder then
         for _, child in ipairs(folder:GetChildren()) do
@@ -23,7 +24,22 @@ local function deleteDecorationsFolder()
         decorationsFolder:Destroy()
     end
 end
+
+local function deleteRocksAndBarriers()
+    local rocksFolder = workspace:FindFirstChild("Map"):FindFirstChild("Rocks")
+    if rocksFolder then
+        rocksFolder:Destroy()
+    end
+
+    local barrier = workspace.dungeon:FindFirstChild("room3"):FindFirstChild("barrier")
+    if barrier then
+        barrier:Destroy()
+    end
+end
+
 deleteDecorationsFolder()
+deleteRocksAndBarriers()
+
 local function refreshColors()
     while true do
         local structuresFolder = workspace:FindFirstChild("Map"):FindFirstChild("Structures")
@@ -40,12 +56,16 @@ end
 spawn(refreshColors)
 ---
 local player = game.Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
 
 -- Paramètres
 local SAFE_DISTANCE = 10
 local OBSTACLE_AVOIDANCE_DISTANCE = 5
 local OBSTACLE_CLEARANCE = 3 -- Distance utilisée pour contourner
 local OBSTACLE_CHECK_ANGLE = math.rad(45) -- Angle pour ajuster la direction
+local WALK_SPEED = 20 -- Vitesse de marche du joueur (ajustez cette valeur selon votre besoin)
+local SKILL_COOLDOWN = 6 -- Temps de recharge pour l'auto-skill en secondes
+local TOOL_ACTIVATION_DISTANCE = 12 -- Distance pour activer les compétences ou outils
 
 -- Liste des objets à ignorer pour le raycast
 local ignoreObjects = {}
@@ -125,6 +145,23 @@ local function findNearestEnemy()
     return nearestEnemy
 end
 
+-- Fonction pour simuler l'appui sur une touche
+local function simulateKeyPress(key)
+    local virtualInputManager = game:GetService("VirtualInputManager")
+    virtualInputManager:SendKeyEvent(true, key, false, nil)
+    wait(0.1) -- Attente pour simuler un appui court
+    virtualInputManager:SendKeyEvent(false, key, false, nil)
+end
+
+-- Fonction pour activer l'outil ou le skill si le joueur est à la bonne distance
+local function activateToolOrSkill(distance)
+    if distance <= TOOL_ACTIVATION_DISTANCE then
+        -- Simule l'appui sur les touches "E" et "Q"
+        simulateKeyPress(Enum.KeyCode.E)
+        simulateKeyPress(Enum.KeyCode.Q)
+    end
+end
+
 -- Fonction pour déplacer le joueur vers l'ennemi
 local function moveToEnemy(enemy)
     if enemy and enemy:FindFirstChild("HumanoidRootPart") then
@@ -154,6 +191,9 @@ local function moveToEnemy(enemy)
             local safePosition = playerPosition + safeDirection * (SAFE_DISTANCE - distance + 1)
             player.Character.Humanoid:MoveTo(safePosition)
         end
+
+        -- Activer l'outil ou la compétence si le joueur est proche de l'ennemi
+        activateToolOrSkill(distance)
     end
 end
 
@@ -173,6 +213,9 @@ end
 -- Fonction pour gérer la réapparition et continuer l'auto-farm
 local function initializeCharacter(character)
     local humanoid = character:WaitForChild("Humanoid")
+
+    -- Définir la vitesse de marche
+    humanoid.WalkSpeed = WALK_SPEED  -- Applique la vitesse de marche personnalisée
 
     humanoid.Died:Connect(function()
         print("Le joueur est mort. En attente de réapparition...")
